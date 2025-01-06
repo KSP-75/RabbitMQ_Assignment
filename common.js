@@ -1,5 +1,30 @@
 const rabbit = require("foo-foo-mq");
 const maxRetries = 5;
+
+async function handler(msg) {
+  console.log("Message is : " , msg.body);
+  const message = msg.body.text;
+  const retryCount = msg.body.retry_count || 0;
+  
+  try {
+    if (Math.random() <= 0.5) throw new Error(`Checking against the failure case for the message ${msg.body.text}`);
+    
+    msg.ack();
+    console.log(`Message ${msg.body.text} processed successfully in ${msg.body.retry_count} retries:`, message);
+  } catch (err) {
+    console.log(`Message ${msg.body.text} processing failed:`, message, err.message);
+    
+    if (retryCount < maxRetries) {
+      msg.body.retry_count = retryCount + 1;
+      await retryPublish(msg.body);
+      msg.ack();
+    } else {
+      console.log(`Max retries reached. Discarding message ${msg.body.text}:`, message);
+      msg.reject();
+    }
+  }
+}
+
 async function retryPublish(args) {
   const { text, routingKey } = args;
 
@@ -21,28 +46,5 @@ async function retryPublish(args) {
   }
 }
 
-async function handler(msg) {
-    console.log("Message is : " , msg.body);
-  const message = msg.body.text;
-  const retryCount = msg.body.retry_count || 0;
-
-  try {
-    if (Math.random() <= 0.5) throw new Error(`Checking against the failure case for the message ${msg.body.text}`);
-
-    msg.ack();
-    console.log(`Message ${msg.body.text} processed successfully in ${msg.body.retry_count} retries:`, message);
-  } catch (err) {
-    console.log(`Message ${msg.body.text} processing failed:`, message, err.message);
-
-    if (retryCount < maxRetries) {
-      msg.body.retry_count = retryCount + 1;
-      await retryPublish(msg.body);
-      msg.ack();
-    } else {
-      console.log(`Max retries reached. Discarding message ${msg.body.text}:`, message);
-      msg.reject();
-    }
-  }
-}
 
 module.exports = {  handler };
